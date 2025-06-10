@@ -104,7 +104,7 @@ export default function Home() {
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="fixed inset-0 bg-black bg-opacity-25" onClick={() => setSidebarOpen(false)} />
+          <div className="fixed inset-0 bg-black bg-opacity-25\" onClick={() => setSidebarOpen(false)} />
         </div>
       )}
 
