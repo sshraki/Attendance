@@ -1,7 +1,9 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { BarChart3, Users, Clock, CheckCircle, AlertTriangle, TrendingUp } from 'lucide-react';
-import { storageService } from '../services/storage';
-import { AttendanceRecord, User, ApprovalRequest } from '../types';
+import { apiService } from '@/services/api';
+import { User } from '@/types';
 
 export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({
@@ -14,86 +16,27 @@ export const Dashboard: React.FC = () => {
   });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadDashboardData();
   }, []);
 
-  const loadDashboardData = () => {
-    const users = storageService.getUsers();
-    const attendanceRecords = storageService.getAttendanceRecords();
-    const approvalRequests = storageService.getApprovalRequests();
-    const user = storageService.getCurrentUser();
-    
-    setCurrentUser(user);
-
-    // Get today's date
-    const today = new Date().toISOString().split('T')[0];
-    const todayRecords = attendanceRecords.filter(record => record.date === today);
-
-    // Calculate stats
-    const totalEmployees = users.filter(u => u.isActive).length;
-    const presentToday = todayRecords.filter(record => record.status === 'present' || record.status === 'partial').length;
-    const lateToday = todayRecords.filter(record => record.isLate).length;
-    const onBreak = todayRecords.filter(record => {
-      const lastBreak = record.breaks[record.breaks.length - 1];
-      return lastBreak && !lastBreak.endTime;
-    }).length;
-    
-    const pendingApprovals = approvalRequests.filter(req => {
-      if (req.status !== 'pending') return false;
+  const loadDashboardData = async () => {
+    try {
+      const [dashboardStats, user] = await Promise.all([
+        apiService.getDashboardStats(),
+        apiService.getCurrentUser()
+      ]);
       
-      // Filter by user role
-      if (user?.role === 'manager') {
-        const employee = users.find(u => u.employeeId === req.employeeId);
-        return employee?.managerId === user.id;
-      } else if (user?.role === 'admin') {
-        return true;
-      }
-      return false;
-    }).length;
-
-    // Calculate average work hours for this week
-    const weekStart = new Date();
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-    const weekStartStr = weekStart.toISOString().split('T')[0];
-    
-    const thisWeekRecords = attendanceRecords.filter(record => record.date >= weekStartStr);
-    const totalWorkHours = thisWeekRecords.reduce((sum, record) => sum + record.totalWorkHours, 0);
-    const avgWorkHours = thisWeekRecords.length > 0 ? totalWorkHours / thisWeekRecords.length : 0;
-
-    setStats({
-      totalEmployees,
-      presentToday,
-      lateToday,
-      pendingApprovals,
-      avgWorkHours: Math.round(avgWorkHours * 10) / 10,
-      onBreak
-    });
-
-    // Generate recent activity
-    const recent = [
-      ...todayRecords.slice(-5).map(record => {
-        const user = users.find(u => u.employeeId === record.employeeId);
-        return {
-          type: 'attendance',
-          message: `${user?.name} checked ${record.checkOut ? 'out' : 'in'}`,
-          time: record.checkOut ? new Date(record.checkOut) : new Date(record.checkIn!),
-          user: user?.name
-        };
-      }),
-      ...approvalRequests.filter(req => req.status === 'pending').slice(-3).map(req => {
-        const user = users.find(u => u.employeeId === req.employeeId);
-        return {
-          type: 'approval',
-          message: `${user?.name} requested ${req.type} approval`,
-          time: new Date(req.requestedAt),
-          user: user?.name
-        };
-      })
-    ].sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 8);
-
-    setRecentActivity(recent);
+      setStats(dashboardStats);
+      setCurrentUser(user);
+      setRecentActivity(dashboardStats.recentActivity || []);
+    } catch (error) {
+      console.error('Failed to load dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const StatCard: React.FC<{
@@ -121,6 +64,24 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-white rounded-lg shadow-lg p-6">
+                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-6">
@@ -209,7 +170,7 @@ export const Dashboard: React.FC = () => {
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-900">{activity.message}</p>
                     <p className="text-xs text-gray-500">
-                      {activity.time.toLocaleTimeString()} - {activity.time.toLocaleDateString()}
+                      {new Date(activity.time).toLocaleTimeString()} - {new Date(activity.time).toLocaleDateString()}
                     </p>
                   </div>
                 </div>

@@ -1,26 +1,37 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
-import { storageService } from '../services/storage';
-import { ApprovalRequest, User } from '../types';
+import { apiService } from '@/services/api';
+import { ApprovalRequest, User } from '@/types';
 
 export const ApprovalManagement: React.FC = () => {
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    const allRequests = storageService.getApprovalRequests();
-    const allUsers = storageService.getUsers();
-    const user = storageService.getCurrentUser();
-    
-    setRequests(allRequests);
-    setUsers(allUsers);
-    setCurrentUser(user);
+  const loadData = async () => {
+    try {
+      const [allRequests, allUsers, user] = await Promise.all([
+        apiService.getApprovalRequests(),
+        apiService.getUsers(),
+        apiService.getCurrentUser()
+      ]);
+      
+      setRequests(allRequests);
+      setUsers(allUsers);
+      setCurrentUser(user);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredRequests = requests.filter(request => {
@@ -35,29 +46,15 @@ export const ApprovalManagement: React.FC = () => {
     return true;
   });
 
-  const handleApproval = (requestId: string, approved: boolean) => {
-    const request = requests.find(r => r.id === requestId);
-    if (!request || !currentUser) return;
+  const handleApproval = async (requestId: string, approved: boolean) => {
+    if (!currentUser) return;
 
-    const updatedRequest: ApprovalRequest = {
-      ...request,
-      status: approved ? 'approved' : 'rejected',
-      approvedBy: currentUser.name,
-      approvedAt: new Date()
-    };
-
-    storageService.saveApprovalRequest(updatedRequest);
-    
-    // Update related attendance record if needed
-    if (request.type === 'late') {
-      const attendanceRecord = storageService.getTodayAttendance(request.employeeId);
-      if (attendanceRecord) {
-        attendanceRecord.lateApproved = approved;
-        storageService.saveAttendanceRecord(attendanceRecord);
-      }
+    try {
+      await apiService.updateApprovalRequest(requestId, approved ? 'approved' : 'rejected', currentUser.name);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to update approval request:', error);
     }
-
-    loadData();
   };
 
   const getRequestTypeColor = (type: string) => {
@@ -88,6 +85,24 @@ export const ApprovalManagement: React.FC = () => {
           <AlertTriangle className="mx-auto h-12 w-12 text-amber-500 mb-4" />
           <h2 className="text-xl font-semibold text-gray-800 mb-2">Access Restricted</h2>
           <p className="text-gray-600">You need manager or admin privileges to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/3 mb-6"></div>
+            <div className="h-10 bg-gray-200 rounded mb-6"></div>
+            <div className="space-y-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-16 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );

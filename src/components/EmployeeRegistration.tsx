@@ -1,9 +1,11 @@
+'use client';
+
 import React, { useState } from 'react';
-import { UserPlus, Save, Camera as CameraIcon } from 'lucide-react';
+import { UserPlus, Save } from 'lucide-react';
 import { Camera } from './Camera';
-import { faceRecognitionService } from '../services/faceRecognition';
-import { storageService } from '../services/storage';
-import { User } from '../types';
+import { faceRecognitionService } from '@/services/faceRecognition';
+import { apiService } from '@/services/api';
+import { User } from '@/types';
 
 export const EmployeeRegistration: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -17,6 +19,20 @@ export const EmployeeRegistration: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string>('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [message, setMessage] = useState('');
+  const [managers, setManagers] = useState<User[]>([]);
+
+  React.useEffect(() => {
+    loadManagers();
+  }, []);
+
+  const loadManagers = async () => {
+    try {
+      const users = await apiService.getUsers();
+      setManagers(users.filter(user => user.role === 'manager'));
+    } catch (error) {
+      console.error('Failed to load managers:', error);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({
@@ -56,8 +72,7 @@ export const EmployeeRegistration: React.FC = () => {
           }
 
           // Create user record
-          const newUser: User = {
-            id: crypto.randomUUID(),
+          const newUser = await apiService.createUser({
             employeeId: formData.employeeId,
             name: formData.name,
             email: formData.email,
@@ -65,12 +80,8 @@ export const EmployeeRegistration: React.FC = () => {
             department: formData.department,
             managerId: formData.managerId || undefined,
             faceDescriptor,
-            createdAt: new Date(),
             isActive: true
-          };
-
-          // Save user
-          storageService.saveUser(newUser);
+          });
 
           setMessage('Employee registered successfully!');
           
@@ -100,8 +111,6 @@ export const EmployeeRegistration: React.FC = () => {
       setIsRegistering(false);
     }
   };
-
-  const managers = storageService.getUsers().filter(user => user.role === 'manager');
 
   return (
     <div className="max-w-6xl mx-auto p-6">

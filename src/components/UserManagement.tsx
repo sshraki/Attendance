@@ -1,7 +1,9 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Edit, Trash2, Search, Shield } from 'lucide-react';
-import { storageService } from '../services/storage';
-import { User } from '../types';
+import { apiService } from '@/services/api';
+import { User } from '@/types';
 
 export const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -9,14 +11,21 @@ export const UserManagement: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<string>('all');
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadUsers();
   }, []);
 
-  const loadUsers = () => {
-    const allUsers = storageService.getUsers();
-    setUsers(allUsers);
+  const loadUsers = async () => {
+    try {
+      const allUsers = await apiService.getUsers();
+      setUsers(allUsers);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredUsers = users.filter(user => {
@@ -32,25 +41,36 @@ export const UserManagement: React.FC = () => {
     setShowEditModal(true);
   };
 
-  const handleSaveUser = (updatedUser: User) => {
-    storageService.saveUser(updatedUser);
-    loadUsers();
-    setShowEditModal(false);
-    setEditingUser(null);
-  };
-
-  const handleDeleteUser = (userId: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      const updatedUsers = users.filter(u => u.id !== userId);
-      localStorage.setItem('users', JSON.stringify(updatedUsers));
-      loadUsers();
+  const handleSaveUser = async (updatedUser: User) => {
+    try {
+      await apiService.updateUser(updatedUser.id, updatedUser);
+      await loadUsers();
+      setShowEditModal(false);
+      setEditingUser(null);
+    } catch (error) {
+      console.error('Failed to update user:', error);
     }
   };
 
-  const toggleUserStatus = (user: User) => {
-    const updatedUser = { ...user, isActive: !user.isActive };
-    storageService.saveUser(updatedUser);
-    loadUsers();
+  const handleDeleteUser = async (userId: string) => {
+    if (confirm('Are you sure you want to delete this user?')) {
+      try {
+        await apiService.deleteUser(userId);
+        await loadUsers();
+      } catch (error) {
+        console.error('Failed to delete user:', error);
+      }
+    }
+  };
+
+  const toggleUserStatus = async (user: User) => {
+    try {
+      const updatedUser = { ...user, isActive: !user.isActive };
+      await apiService.updateUser(user.id, updatedUser);
+      await loadUsers();
+    } catch (error) {
+      console.error('Failed to toggle user status:', error);
+    }
   };
 
   const getRoleBadgeColor = (role: string) => {
@@ -60,6 +80,24 @@ export const UserManagement: React.FC = () => {
       default: return 'bg-green-100 text-green-700';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
+            <div className="h-10 bg-gray-200 rounded mb-6"></div>
+            <div className="space-y-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-16 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -215,8 +253,20 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onSave, onClose }) 
     role: user.role,
     managerId: user.managerId || ''
   });
+  const [managers, setManagers] = useState<User[]>([]);
 
-  const managers = storageService.getUsers().filter(u => u.role === 'manager' && u.id !== user.id);
+  useEffect(() => {
+    loadManagers();
+  }, []);
+
+  const loadManagers = async () => {
+    try {
+      const users = await apiService.getUsers();
+      setManagers(users.filter(u => u.role === 'manager' && u.id !== user.id));
+    } catch (error) {
+      console.error('Failed to load managers:', error);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

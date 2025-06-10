@@ -1,6 +1,8 @@
+'use client';
+
 import React, { useRef, useEffect, useState } from 'react';
 import { Camera as CameraIcon, Square, UserCheck, AlertCircle, Settings, RefreshCw } from 'lucide-react';
-import { faceRecognitionService } from '../services/faceRecognition';
+import { faceRecognitionService } from '@/services/faceRecognition';
 
 interface CameraProps {
   onFaceDetected?: (employeeId: string) => void;
@@ -49,10 +51,10 @@ export const Camera: React.FC<CameraProps> = ({
         const permission = await navigator.permissions.query({ name: 'camera' as PermissionName });
         return permission.state === 'granted';
       }
-      return true; // Assume permission if API not available
+      return true;
     } catch (error) {
       console.warn('Permission API not available:', error);
-      return true; // Assume permission if API not available
+      return true;
     }
   };
 
@@ -62,23 +64,19 @@ export const Camera: React.FC<CameraProps> = ({
       setCameraError('');
       setPermissionDenied(false);
 
-      // Check if camera permission is available
       const hasPermission = await checkCameraPermission();
       if (!hasPermission) {
         throw new Error('Camera permission not granted');
       }
 
-      // Get available video devices
       let videoDevices: MediaDeviceInfo[] = [];
       try {
         videoDevices = await faceRecognitionService.getVideoDevices();
         setDevices(videoDevices);
       } catch (deviceError) {
         console.warn('Could not enumerate devices:', deviceError);
-        // Continue anyway, might still work with default device
       }
 
-      // Stop existing stream
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -100,7 +98,6 @@ export const Camera: React.FC<CameraProps> = ({
     } catch (error: any) {
       console.error('Camera initialization error:', error);
       
-      // Handle different types of errors
       if (error.name === 'NotAllowedError' || 
           error.name === 'SecurityError' || 
           error.message?.includes('Permission denied') ||
@@ -113,7 +110,6 @@ export const Camera: React.FC<CameraProps> = ({
         setCameraError('Camera is already in use by another application. Please close other applications using the camera.');
       } else if (error.name === 'OverconstrainedError') {
         setCameraError('Camera constraints not supported. Trying with default settings...');
-        // Try again with basic constraints
         setTimeout(() => {
           setSelectedDevice('');
         }, 1000);

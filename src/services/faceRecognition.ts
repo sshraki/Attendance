@@ -1,4 +1,5 @@
 import * as faceapi from 'face-api.js';
+import { apiService } from './api';
 
 export class FaceRecognitionService {
   private isLoaded = false;
@@ -18,7 +19,6 @@ export class FaceRecognitionService {
       this.isLoaded = true;
     } catch (error) {
       console.error('Error loading face-api models:', error);
-      // Fallback: mark as loaded to continue with limited functionality
       this.isLoaded = true;
     }
   }
@@ -46,14 +46,9 @@ export class FaceRecognitionService {
       const detection = await this.detectFace(imageElement);
       if (!detection) return null;
 
-      if (this.labeledDescriptors.length === 0) {
-        this.loadStoredFaces();
-      }
-
-      const faceMatcher = new faceapi.FaceMatcher(this.labeledDescriptors, 0.6);
-      const result = faceMatcher.findBestMatch(detection.descriptor);
-      
-      return result.label !== 'unknown' ? result.label : null;
+      // Convert face descriptor to base64 for API call
+      const faceData = this.descriptorToBase64(detection.descriptor);
+      return await apiService.recognizeFace(faceData);
     } catch (error) {
       console.error('Face recognition error:', error);
       return null;
@@ -67,15 +62,9 @@ export class FaceRecognitionService {
       const detection = await this.detectFace(imageElement);
       if (!detection) return null;
 
-      // Store the face descriptor
-      const faceData = {
-        employeeId,
-        descriptor: detection.descriptor,
-        imageUrl: imageElement.src
-      };
-      
-      this.storeFaceData(faceData);
-      this.updateLabeledDescriptors();
+      // Convert face descriptor to base64 for API call
+      const faceData = this.descriptorToBase64(detection.descriptor);
+      await apiService.registerFace(employeeId, faceData);
       
       return detection.descriptor;
     } catch (error) {
@@ -84,52 +73,14 @@ export class FaceRecognitionService {
     }
   }
 
-  private storeFaceData(faceData: any) {
-    const stored = localStorage.getItem('faceData') || '[]';
-    const faceDataArray = JSON.parse(stored);
-    
-    // Remove existing data for this employee
-    const filtered = faceDataArray.filter((data: any) => data.employeeId !== faceData.employeeId);
-    filtered.push({
-      ...faceData,
-      descriptor: Array.from(faceData.descriptor) // Convert Float32Array to regular array for storage
-    });
-    
-    localStorage.setItem('faceData', JSON.stringify(filtered));
+  private descriptorToBase64(descriptor: Float32Array): string {
+    const array = Array.from(descriptor);
+    return btoa(JSON.stringify(array));
   }
 
-  private loadStoredFaces() {
-    const stored = localStorage.getItem('faceData') || '[]';
-    const faceDataArray = JSON.parse(stored);
-    
-    this.labeledDescriptors = faceDataArray.map((data: any) => {
-      const descriptor = new Float32Array(data.descriptor);
-      return new faceapi.LabeledFaceDescriptors(data.employeeId, [descriptor]);
-    });
-  }
-
-  private updateLabeledDescriptors() {
-    this.loadStoredFaces();
-  }
-
-  async startCamera(): Promise<MediaStream | null> {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(device => device.kind === 'videoinput');
-      
-      const constraints: MediaStreamConstraints = {
-        video: {
-          deviceId: videoDevices.length > 0 ? videoDevices[0].deviceId : undefined,
-          width: { ideal: 640 },
-          height: { ideal: 480 }
-        }
-      };
-      
-      return await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (error) {
-      console.error('Camera access error:', error);
-      return null;
-    }
+  private base64ToDescriptor(base64: string): Float32Array {
+    const array = JSON.parse(atob(base64));
+    return new Float32Array(array);
   }
 
   async getVideoDevices(): Promise<MediaDeviceInfo[]> {

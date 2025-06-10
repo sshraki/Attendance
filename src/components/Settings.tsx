@@ -1,7 +1,9 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Save, Clock, Users, AlertTriangle } from 'lucide-react';
-import { storageService } from '../services/storage';
-import { Settings as SettingsType } from '../types';
+import { apiService } from '@/services/api';
+import { Settings as SettingsType } from '@/types';
 
 export const Settings: React.FC = () => {
   const [settings, setSettings] = useState<SettingsType>({
@@ -15,11 +17,23 @@ export const Settings: React.FC = () => {
     workingHoursPerDay: 8
   });
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const storedSettings = storageService.getSettings();
-    setSettings(storedSettings);
+    loadSettings();
   }, []);
+
+  const loadSettings = async () => {
+    try {
+      const storedSettings = await apiService.getSettings();
+      setSettings(storedSettings);
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = e.target;
@@ -29,12 +43,46 @@ export const Settings: React.FC = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    storageService.saveSettings(settings);
-    setMessage('Settings saved successfully!');
-    setTimeout(() => setMessage(''), 3000);
+    setSaving(true);
+    
+    try {
+      await apiService.updateSettings(settings);
+      setMessage('Settings saved successfully!');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      setMessage('Failed to save settings. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/3 mb-6"></div>
+            <div className="space-y-6">
+              <div className="bg-gray-50 rounded-lg p-6">
+                <div className="h-6 bg-gray-200 rounded w-1/4 mb-4"></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i}>
+                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-10 bg-gray-200 rounded"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -45,7 +93,9 @@ export const Settings: React.FC = () => {
         </h2>
 
         {message && (
-          <div className="mb-6 p-4 bg-green-100 text-green-700 rounded-lg">
+          <div className={`mb-6 p-4 rounded-lg ${
+            message.includes('successfully') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+          }`}>
             {message}
           </div>
         )}
@@ -222,10 +272,11 @@ export const Settings: React.FC = () => {
           <div className="flex justify-end">
             <button
               type="submit"
-              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={saving}
+              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
             >
               <Save className="mr-2 h-4 w-4" />
-              Save Settings
+              {saving ? 'Saving...' : 'Save Settings'}
             </button>
           </div>
         </form>
