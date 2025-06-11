@@ -89,6 +89,8 @@ The application will be available at `http://localhost:3000`
 
 ## 👥 Default Test Accounts
 
+After running the seed script, you'll have these test accounts:
+
 | Role | Employee ID | Email | Password |
 |------|-------------|-------|----------|
 | Admin | ADMIN001 | admin@company.com | admin123 |
